@@ -62,13 +62,14 @@ ollama serve
 
 Default endpoint: `http://localhost:11434`
 
-Pull at least one model:
+Pull the required models:
 
 ```bash
-ollama pull llama3
+ollama pull llama3.2
+ollama pull nomic-embed-text
 ```
 
-Verify the model is available:
+Verify the models are available:
 
 ```bash
 ollama list
@@ -88,7 +89,6 @@ Populate it with any required configuration. Example:
 
 ```
 OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=llama3
 ```
 
 Refer to the application source (`main.py`) for the definitive list of expected variables.
@@ -98,21 +98,21 @@ Refer to the application source (`main.py`) for the definitive list of expected 
 ## 6. Run the Application
 
 ```bash
-uv run python main.py
+uv run python main.py <folder_path> [overwrite]
 ```
 
-Alternatively, activate the virtual environment first:
+Arguments:
+- `folder_path` — Path to a folder containing C/C++ source files (`.cpp`, `.h`, `.hpp`, `.cc`, `.cxx`, `.hxx`).
+- `overwrite` — Optional. Pass `overwrite` to force re-indexing even if a saved index exists.
+
+Example:
 
 ```bash
-source .venv/bin/activate
-python main.py
+uv run python main.py ~/my-cpp-project
+uv run python main.py ~/my-cpp-project overwrite
 ```
 
-Expected output on a fresh install:
-
-```
-Hello from rag!
-```
+On first run the tool indexes all source files into a local vector database, then opens an interactive chat where you can ask questions about the code.
 
 ---
 
@@ -121,14 +121,14 @@ Hello from rag!
 ```
 RAG/
 ├── .venv/              # Virtual environment (not in version control)
+├── .chroma_db/         # Persisted vector database (not in version control)
 ├── main.py             # Application entry point
 ├── pyproject.toml      # Project metadata and dependencies
 ├── uv.lock             # Pinned dependency lock file
 ├── .python-version     # Python version pin (3.12)
 ├── .gitignore          # Git ignore rules
 ├── .env                # Environment variables (not in version control)
-├── README.md           # Project description
-└── howto.md            # This file
+└── README.md           # This file
 ```
 
 ---
