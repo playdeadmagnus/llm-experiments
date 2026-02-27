@@ -149,7 +149,7 @@ def build_index(folder_path: str, client: chromadb.ClientAPI) -> chromadb.Collec
         print(f"  Indexed {done}/{len(all_chunks)} chunks")
 
     # Save indexed folder path as metadata marker
-    meta_collection = client.get_or_create_collection(name="__rag_meta__")
+    meta_collection = client.get_or_create_collection(name="rag-meta")
     try:
         meta_collection.delete(ids=["source_folder"])
     except Exception:
