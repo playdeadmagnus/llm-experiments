@@ -19,7 +19,7 @@ import ollama
 COLLECTION_NAME = "code_rag"
 CHROMA_PERSIST_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".chroma_db")
 EMBED_MODEL = "nomic-embed-text"
-CHAT_MODEL = "llama3.2"
+CHAT_MODEL = "llama4:latest"
 CHUNK_SIZE = 1500
 CHUNK_OVERLAP = 200
 
