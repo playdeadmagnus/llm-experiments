@@ -1,0 +1,14 @@
+[
+  {
+    "id": 2,
+    "question": "\u276f how do i know if the game is paused ?",
+    "answer": "\u25cf There are several ways to check if the game is paused, depending on context:\n\n  1. Standard UE pause check (most common)\n  UGameplayStatics::IsGamePaused(GetWorld())\n  // or\n  GetWorld()->IsPaused()\n\n  2. Pause screen UI state \u2014 via UPauseScreenWidget (PauseScreenWidget.h:67):\n  // From the widget itself\n  bool IsPauseScreenActive() const  // true if state != Inactive\n  EPauseScreenState GetPauseScreenState() const\n  The EPauseScreenState enum (PauseScreenWidget.h:11) has states like Inactive, Active, Deactivating, etc.\n\n  3. From the MasterWidget (MasterWidget.h:42):\n  MasterWidget->IsPauseScreenActive()\n\n  4. From the player controller \u2014 ProcessPlayerInput receives bGamePaused as a parameter (PDPlayerController.h:79):\n  void ProcessPlayerInput(const float DeltaTime, const bool bGamePaused) override;\n\n  5. In AstronautState \u2014 there's a dedicated virtual (AstronautState.h:58):\n  virtual void TickStatePaused() {}  // called when game is paused\n\n  Summary: For gameplay code, UGameplayStatics::IsGamePaused(GetWorld()) is the standard check. If you need to know about the pause menu\n  specifically (which may have transition states), use UPauseScreenWidget::IsPauseScreenActive() through the MasterWidget. Inside an\n  AstronautState, override TickStatePaused() to run logic while paused.",
+    "results": []
+  },
+  {
+    "id": 3,
+    "question": "[Simon Vickers, 4:34 PM]\nhallo, Ive noticed that the umbrella item's blocks the visibility channel as it uses the Astronaut collision preset. Is this necessary?\n\n[Simon Vickers, 5:00 PM]\nhmm, I have an issue where I'm setting a trace to ignore astro but because the umrella item is created dymanically I can't include that :neutral_face:\n[Magnus Koch, 4:47 PM]\nI know that the response for many of the default channels (like visibility) have been set a bit randomly / to default . My guess is that the camera uses visibility. Maybe markers. And that it is ok to have visibility=ignore for Astro. But that's a guess\n\n[Magnus Koch, 8:56 AM]\nyou can do FCollisionQueryParams CollisionQueryParams = FCollisionQueryParams::DefaultQueryParam; CollisionQueryParams.AddIgnoredActor(Astronaut->GetUmbrellaItem()); The response for many of the default channels (like visibility) have been set a bit randomly / to default. The camera uses visibility, maybe markers. It is likely ok to have visibility=ignore for Astro.\nmissing",
+    "answer": "",
+    "results": []
+  }
+]

@@ -1,0 +1,17 @@
+Claude code can be hooked up to other models besides the ones provided by
+anthropic. Local models or other cloud providers.
+
+Using local models makes claude code free (besides actually running a model on
+owned hardware) but quality will probably suffer.
+
+Other cloud provides might give results comparable to anthropic models. In which
+case we dont have to pay anthropic but are more free to chose. That might be a
+good thing.
+
+Maybe some use cases calls for a full anthropic subscription, while simpler
+setups such as generic engine questions or simple document analysis can be done
+with free models or other cloud providers.
+
+I have been doing some testing with local models.
+
+https://aider.chat/

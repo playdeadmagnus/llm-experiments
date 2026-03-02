@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Model Test Results</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 0 auto; padding: 2rem 1rem; color: #222; }
+    h1 { margin-bottom: 1.5rem; }
+
+    .entry { border: 1px solid #ddd; border-radius: 6px; padding: 1.25rem; margin-bottom: 1.25rem; position: relative; }
+    .entry-id { font-size: 0.75rem; color: #888; margin-bottom: 0.25rem; }
+    .section-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #888; margin-bottom: 0.25rem; }
+    .question { background: #fff; padding: 0.75rem; border: 1px solid #e8e8e8; border-radius: 4px; margin-bottom: 0.75rem; white-space: pre-wrap; font-size: 0.9rem; }
+    .answer { background: #f5f5f5; padding: 0.75rem; border-radius: 4px; margin-bottom: 0.75rem; white-space: pre-wrap; font-family: monospace; font-size: 0.9rem; }
+    .results { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem; }
+    .result { padding: 0.35rem 0.75rem; border-radius: 4px; font-size: 0.85rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem; }
+    .result-correct   { background: #d4edda; color: #155724; }
+    .result-wrong     { background: #fff3cd; color: #856404; }
+    .result-dangerous { background: #f8d7da; color: #721c24; }
+    .result-garbage   { background: #e2e3e5; color: #495057; }
+    .result .remove-result { cursor: pointer; opacity: 0.5; font-size: 0.9rem; }
+    .result .remove-result:hover { opacity: 1; }
+    .no-results { font-size: 0.85rem; color: #999; font-style: italic; }
+
+    /* Inline add-result row */
+    .inline-add { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
+    .inline-add input { flex: 1; padding: 0.35rem 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem; }
+    .inline-add select { padding: 0.35rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem; }
+    .inline-add button { padding: 0.35rem 0.7rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; background: #007bff; color: #fff; }
+
+    /* Edit controls */
+    .entry-actions { position: absolute; top: 0.75rem; right: 0.75rem; display: flex; gap: 0.4rem; }
+    .entry-actions button { background: none; border: 1px solid #ccc; border-radius: 4px; padding: 0.2rem 0.5rem; cursor: pointer; font-size: 0.75rem; color: #555; }
+    .entry-actions button:hover { background: #f0f0f0; }
+    .edit-field { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; font-size: 0.9rem; resize: vertical; margin-bottom: 0.5rem; }
+
+    #error { color: #c00; margin: 2rem 0; }
+
+    /* New entry form */
+    #add-form { border: 2px dashed #ccc; border-radius: 6px; padding: 1.25rem; margin-bottom: 2rem; }
+    #add-form h2 { font-size: 1rem; margin-bottom: 0.75rem; }
+    #add-form label { display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 0.25rem; margin-top: 0.75rem; }
+    #add-form textarea { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; font-size: 0.9rem; resize: vertical; min-height: 60px; }
+    .form-btns { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.75rem; }
+    .btn { padding: 0.4rem 1rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; }
+    .btn-primary { background: #007bff; color: #fff; font-weight: 600; }
+    .btn-primary:hover { background: #0056b3; }
+    .btn-secondary { background: #eee; }
+    .status-msg { font-size: 0.85rem; margin-left: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Model Test Results</h1>
+
+  <div id="add-form">
+    <h2>Add New Entry</h2>
+    <label for="q-input">Question (paste Slack thread or plain text — auto-parsed)</label>
+    <textarea id="q-input" rows="4" placeholder="Paste a Slack thread or type a question..."></textarea>
+    <label for="a-input">Expected Answer (from LLM)</label>
+    <textarea id="a-input" rows="4" placeholder="Paste or type the expected answer..."></textarea>
+    <div class="form-btns">
+      <button type="button" class="btn btn-primary" id="add-btn">Add Entry</button>
+      <span class="status-msg" id="new-status"></span>
+    </div>
+  </div>
+
+  <div id="root"></div>
+  <div id="error"></div>
+
+  <script>
+    let data = [];
+    let models = [];
+    let skills = [];
+
+    function esc(str) {
+      const d = document.createElement('div');
+      d.textContent = String(str);
+      return d.innerHTML;
+    }
+
+    function modelOptions() {
+      return models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
+    }
+
+    function skillOptions() {
+      return skills.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    }
+
+    function nextId() {
+      if (data.length === 0) return 1;
+      return Math.max(...data.map(e => e.id)) + 1;
+    }
+
+    async function persist() {
+      try {
+        const res = await fetch('results.json', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data, null, 2)
+        });
+        if (!res.ok) throw new Error(res.status);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    function flash(el, ok) {
+      el.textContent = ok ? 'Saved!' : 'In-memory only (use server.py to persist)';
+      el.style.color = ok ? '#155724' : '#856404';
+      setTimeout(() => { el.textContent = ''; }, 3000);
+    }
+
+    function render() {
+      const root = document.getElementById('root');
+      if (data.length === 0) {
+        root.innerHTML = '<p style="color:#999">No entries yet.</p>';
+        return;
+      }
+      root.innerHTML = '';
+      data.forEach((entry, idx) => {
+        const div = document.createElement('div');
+        div.className = 'entry';
+        div.innerHTML = buildEntryHTML(entry);
+        bindEntry(div, idx);
+        root.appendChild(div);
+      });
+    }
+
+    function buildEntryHTML(entry) {
+      const resultsHTML = entry.results.length === 0
+        ? '<span class="no-results">No model results yet</span>'
+        : entry.results.map((r, ri) => {
+            const skillLabel = r.skill && r.skill !== 'None' ? ` + ${esc(r.skill)}` : '';
+            return `<span class="result result-${esc(r.result)}">
+              ${esc(r.model)}${skillLabel}: ${esc(r.result)}
+              <span class="remove-result" data-ri="${ri}" title="Remove">&times;</span>
+            </span>`;
+          }).join('');
+
+      return `
+        <div class="entry-actions">
+          <button class="reparse-btn">Re-parse</button>
+          <button class="edit-btn">Edit</button>
+          <button class="delete-btn">Delete</button>
+        </div>
+        <div class="entry-id">#${entry.id}</div>
+        <div class="section-label">Question</div>
+        <div class="question question-display">${esc(entry.question)}</div>
+        <div class="section-label">Answer</div>
+        <div class="answer">${esc(entry.answer)}</div>
+        <div class="results">${resultsHTML}</div>
+        <div class="inline-add">
+          <select class="add-model-name">${modelOptions()}</select>
+          <select class="add-model-skill">${skillOptions()}</select>
+          <select class="add-model-result">
+            <option value="correct">correct</option>
+            <option value="wrong">wrong</option>
+            <option value="dangerous">dangerous</option>
+            <option value="garbage">garbage</option>
+          </select>
+          <button class="add-result-btn">+ Add</button>
+        </div>
+        <span class="status-msg entry-status"></span>
+      `;
+    }
+
+    function bindEntry(div, idx) {
+      const entry = data[idx];
+      const statusEl = div.querySelector('.entry-status');
+
+      // Add result
+      div.querySelector('.add-result-btn').addEventListener('click', async () => {
+        const model = div.querySelector('.add-model-name').value;
+        if (!model) return;
+        const skill = div.querySelector('.add-model-skill').value;
+        const result = div.querySelector('.add-model-result').value;
+        entry.results.push({ model, skill, result });
+        const ok = await persist();
+        render();
+      });
+
+      // Remove result
+      div.querySelectorAll('.remove-result').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const ri = parseInt(btn.dataset.ri);
+          entry.results.splice(ri, 1);
+          await persist();
+          render();
+        });
+      });
+
+      // Re-parse: run Slack parser on existing question+answer text
+      div.querySelector('.reparse-btn').addEventListener('click', () => {
+        const raw = entry.question + '\n' + entry.answer;
+        const messages = parseSlack(raw);
+        const actions = div.querySelector('.entry-actions');
+        const qDiv = div.querySelector('.question-display');
+        const ansDiv = div.querySelector('.answer');
+        // Also remove the section labels above them
+        const labels = div.querySelectorAll('.section-label');
+
+        if (messages.length === 0) {
+          labels.forEach(l => l.remove());
+          qDiv.outerHTML = `<label style="font-weight:600;font-size:0.8rem;">Question</label><textarea class="edit-field edit-q" rows="4">${esc(entry.question)}</textarea>`;
+          ansDiv.outerHTML = `<label style="font-weight:600;font-size:0.8rem;">Answer</label><textarea class="edit-field edit-a" rows="4">${esc(entry.answer)}</textarea>`;
+        } else {
+          const asker = messages[0].name;
+          const questionMsgs = messages.filter(m => m.name === asker);
+          const answerMsgs = messages.filter(m => m.name !== asker);
+          labels.forEach(l => l.remove());
+          qDiv.outerHTML = `<label style="font-weight:600;font-size:0.8rem;">Question (${esc(asker)})</label><textarea class="edit-field edit-q" rows="4">${esc(formatMessages(questionMsgs))}</textarea>`;
+          ansDiv.outerHTML = `<label style="font-weight:600;font-size:0.8rem;">Answer</label><textarea class="edit-field edit-a" rows="4">${esc(formatMessages(answerMsgs))}</textarea>`;
+        }
+
+        actions.innerHTML = `<button class="save-edit-btn">Save</button> <button class="cancel-edit-btn">Cancel</button>`;
+        div.querySelector('.save-edit-btn').addEventListener('click', async () => {
+          entry.question = div.querySelector('.edit-q').value.trim();
+          entry.answer = div.querySelector('.edit-a').value.trim();
+          await persist();
+          render();
+        });
+        div.querySelector('.cancel-edit-btn').addEventListener('click', () => render());
+      });
+
+      // Edit question/answer
+      div.querySelector('.edit-btn').addEventListener('click', () => {
+        const qDiv = div.querySelector('.question-display');
+        const ansDiv = div.querySelector('.answer');
+        const labels = div.querySelectorAll('.section-label');
+        const actions = div.querySelector('.entry-actions');
+
+        labels.forEach(l => l.remove());
+        qDiv.outerHTML = `<label style="font-weight:600;font-size:0.8rem;">Question</label><textarea class="edit-field edit-q" rows="4">${esc(entry.question)}</textarea>`;
+        ansDiv.outerHTML = `<label style="font-weight:600;font-size:0.8rem;">Answer</label><textarea class="edit-field edit-a" rows="4">${esc(entry.answer)}</textarea>`;
+        actions.innerHTML = `<button class="save-edit-btn">Save</button> <button class="cancel-edit-btn">Cancel</button>`;
+
+        div.querySelector('.save-edit-btn').addEventListener('click', async () => {
+          entry.question = div.querySelector('.edit-q').value.trim();
+          entry.answer = div.querySelector('.edit-a').value.trim();
+          await persist();
+          render();
+        });
+        div.querySelector('.cancel-edit-btn').addEventListener('click', () => render());
+      });
+
+      // Delete entry
+      div.querySelector('.delete-btn').addEventListener('click', async () => {
+        if (!confirm('Delete entry #' + entry.id + '?')) return;
+        data.splice(idx, 1);
+        await persist();
+        render();
+      });
+    }
+
+    // Slack parser — handles both formats:
+    //   Original Slack: "Name  [4:34 PM]" (with 2+ spaces/nbsp before bracket)
+    //   Formatted:      "[Name, 4:34 PM]" (our output, may be inline on one line)
+    function parseSlack(text) {
+      // 1) Try formatted [Name, time] headers (works even on a single line)
+      const fmtRe = /\[([^\]\n]+?),\s*([\d:]+\s*[AP]M)\]/g;
+      const fmtMatches = [...text.matchAll(fmtRe)];
+
+      if (fmtMatches.length > 0) {
+        const messages = [];
+        for (let i = 0; i < fmtMatches.length; i++) {
+          const m = fmtMatches[i];
+          const bodyStart = m.index + m[0].length;
+          const bodyEnd = i + 1 < fmtMatches.length ? fmtMatches[i + 1].index : text.length;
+          const body = text.substring(bodyStart, bodyEnd).trim();
+          messages.push({
+            name: m[1].trim(),
+            time: m[2].trim(),
+            lines: body ? body.split('\n') : []
+          });
+        }
+        return messages;
+      }
+
+      // 2) Fall back to original Slack format: Name  [time] (line-by-line)
+      const lines = text.split('\n');
+      const messages = [];
+      let current = null;
+
+      for (let line of lines) {
+        line = line.replace(/^\d+\s*repl(?:y|ies)/, '');
+        const match = line.match(/^(.+?)[\s\u00a0]{2,}\[([\d:]+\s*[AP]M)\]/);
+        if (match) {
+          if (current) messages.push(current);
+          current = { name: match[1].trim(), time: match[2].trim(), lines: [] };
+        } else if (current) {
+          const trimmed = line.trim();
+          if (trimmed && trimmed !== '(edited)') {
+            current.lines.push(line);
+          }
+        }
+      }
+      if (current) messages.push(current);
+      return messages;
+    }
+
+    function formatMessages(msgs) {
+      return msgs.map(m => {
+        const body = m.lines.join('\n').trim();
+        return `[${m.name}, ${m.time}]\n${body}`;
+      }).join('\n\n');
+    }
+
+    // Add entry: auto-parse question field if it looks like Slack
+    document.getElementById('add-btn').addEventListener('click', async () => {
+      const raw = document.getElementById('q-input').value.trim();
+      const answer = document.getElementById('a-input').value.trim();
+      if (!raw) { alert('Question is required.'); return; }
+
+      // Try Slack parse on the question field
+      const messages = parseSlack(raw);
+      const question = messages.length > 0 ? formatMessages(messages) : raw;
+
+      data.push({ id: nextId(), question, answer, results: [] });
+      const ok = await persist();
+      document.getElementById('q-input').value = '';
+      document.getElementById('a-input').value = '';
+      flash(document.getElementById('new-status'), ok);
+      render();
+    });
+
+    // Load models, skills, then data
+    Promise.all([
+      fetch('models.json').then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch('skills.json').then(r => r.ok ? r.json() : []).catch(() => [])
+    ])
+      .then(([m, s]) => { models = m; skills = s; })
+      .then(() => fetch('results.json'))
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to load results.json');
+        return res.json();
+      })
+      .then(d => { data = d; render(); })
+      .catch(err => {
+        document.getElementById('error').textContent = err.message;
+      });
+  </script>
+</body>
+</html>
